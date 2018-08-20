@@ -283,7 +283,11 @@ if ($isLogged && $folder !== 'root' && $get !== '' && $isPano === false) {
 <html lang="fr">
 <head>
     <meta charset="utf-8">
+    <?php if ($isLogged) { ?>
     <title><?php echo $TITLE; ?> - Galerie Photos</title>
+    <?php } else { ?>
+    <title></title>
+    <?php } ?>
     <script src="pannellum/pannellum.js"></script>
     <link rel="stylesheet" href="pannellum//pannellum.css">
     <style>
