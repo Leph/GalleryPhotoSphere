@@ -251,6 +251,9 @@ if ($isLogged && $folder != 'root' && $handle = opendir($PATH.$folder)) {
     }
     closedir($handle);
 }
+usort($pictures, function ($item1, $item2) {
+    return $item1['path'] <=> $item2['path'];
+});
 
 if ($isLogged && $folder !== 'root' && $get !== '' && $isPano === false) {
     $filename = $PATH.$folder.'/'.$get;
