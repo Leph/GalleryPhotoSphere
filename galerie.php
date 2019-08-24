@@ -291,8 +291,8 @@ if ($isLogged && $folder !== 'root' && $get !== '' && $isPano === false) {
     <?php } else { ?>
     <title></title>
     <?php } ?>
-    <script src="pannellum/pannellum.js"></script>
-    <link rel="stylesheet" href="pannellum//pannellum.css">
+    <script src="/pannellum/pannellum.js"></script>
+    <link rel="stylesheet" href="/pannellum//pannellum.css">
     <style>
         html, body, div, span, applet, object, iframe,
         h1, h2, h3, h4, h5, h6, p, blockquote, pre,
