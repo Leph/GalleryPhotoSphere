@@ -59,11 +59,26 @@ if ($isLogged && $folder !== 'root' && isset($_GET['get'])) {
 }
 
 $isPano = false;
+$isVideo = false;
 if ($isLogged && $folder !== 'root' && $get !== '' && isset($_GET['pano'])) {
     $filename = $PATH.$folder.'/'.$get;
-    $exif = exif_read_data($filename);
-    if ($exif['Make'] === 'MADV') {
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    if (false !== array_search(
+        $finfo->file($filename),
+        array(
+            'mp4' => 'video/mp4',
+        ),
+        true
+    )) {
+        $isVideo = true;
+    }
+    if ($isVideo) {
         $isPano = true;
+    } else {
+        $exif = exif_read_data($filename);
+        if ($exif['Make'] === 'MADV') {
+            $isPano = true;
+        }
     }
 }
 
@@ -182,83 +197,125 @@ if ($isLogged && $handle = opendir($PATH)) {
     }
     closedir($handle);
 }
+/*
 usort($directories, function ($item1, $item2) {
     return $item1['name'] <=> $item2['name'];
 });
+ */
 
 $pictures = array();
 if ($isLogged && $folder != 'root' && $handle = opendir($PATH.$folder)) {
     while (false !== ($entry = readdir($handle))) {
         if ($entry != "." && $entry != ".." && !is_dir($entry) && strpos($entry, 'thumb__') === false) {
             $filePath = $PATH.$folder.'/'.$entry;
-            $thumbPath = $PATH.$folder.'/'.'thumb__'.$entry;
-            $exif = exif_read_data($filePath);
-            $pictures[] = array(
-                'path' => $entry, 
-                'thumb' => 'thumb__'.$entry,
-                'isPano' => ($exif['Make'] === 'MADV'),
-            );
-            if (!file_exists($PATH.$thumbPath)) {
-                $extension = strtolower(strrchr($thumbPath, '.'));
-                $img = false;
-                switch ($extension) {
-                    case '.jpg':
-                    case '.jpeg':
-                        $img = @imagecreatefromjpeg($filePath);
-                        break;
-                    case '.gif':
-                        $img = @imagecreatefromgif($filePath);
-                        break;
-                    case '.png':
-                        $img = @imagecreatefrompng($filePath);
-                        break;
-                    default:
-                        break;
-                }
-                if (!$img) {
-                    continue;
-                }
-                if (!empty($exif['Orientation'])) {
-                    switch ($exif['Orientation']) {
-                        case 3:
-                            $img = imagerotate($img, 180, 0);
+            $thumbPath = $PATH.$folder.'/'.'thumb__'.$entry.'.jpg';
+            $isFileImg = false;
+            $isFileVid = false;
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
+            if (false !== array_search(
+                $finfo->file($filePath),
+                array(
+                    'jpg' => 'image/jpeg',
+                    'png' => 'image/png',
+                    'gif' => 'image/gif',
+                ),
+                true
+            )) {
+                $isFileImg = true;
+            }
+            if (false !== array_search(
+                $finfo->file($filePath),
+                array(
+                    'mp4' => 'video/mp4',
+                ),
+                true
+            )) {
+                $isFileVid = true;
+            }
+            if ($isFileImg) {
+                $exif = exif_read_data($filePath);
+                $pictures[] = array(
+                    'path' => $entry, 
+                    'thumb' => 'thumb__'.$entry.'.jpg',
+                    'isPano' => (isset($exif['Make']) && $exif['Make'] === 'MADV'),
+                    'isVid' => false,
+                );
+                if (!file_exists($PATH.$thumbPath)) {
+                    $extension = strtolower(strrchr($thumbPath, '.'));
+                    $img = false;
+                    switch ($extension) {
+                        case '.jpg':
+                        case '.jpeg':
+                            $img = @imagecreatefromjpeg($filePath);
                             break;
-                        case 6:
-                            $img = imagerotate($img, -90, 0);
+                        case '.gif':
+                            $img = @imagecreatefromgif($filePath);
                             break;
-                        case 8:
-                            $img = imagerotate($img, 90, 0);
+                        case '.png':
+                            $img = @imagecreatefrompng($filePath);
+                            break;
+                        default:
                             break;
                     }
+                    if (!$img) {
+                        continue;
+                    }
+                    if (!empty($exif['Orientation'])) {
+                        switch ($exif['Orientation']) {
+                            case 3:
+                                $img = imagerotate($img, 180, 0);
+                                break;
+                            case 6:
+                                $img = imagerotate($img, -90, 0);
+                                break;
+                            case 8:
+                                $img = imagerotate($img, 90, 0);
+                                break;
+                        }
+                    }
+                    $targetWidth = 500;
+                    $width = imagesx($img);
+                    $height = imagesy($img);
+                    $desired_width = $width;
+                    $desired_height = $height;
+                    if ($width > $height) {
+                        $desired_width = $targetWidth;
+                        $desired_height = $targetWidth*$height/$width;
+                    } else {
+                        $desired_height = $targetWidth;
+                        $desired_width = $targetWidth*$width/$height;
+                    }
+                    $virtual_image = imagecreatetruecolor($desired_width, $desired_height);
+                    imagecopyresampled($virtual_image, $img, 0, 0, 0, 0, $desired_width, $desired_height, $width, $height);
+                    imagejpeg($virtual_image, $thumbPath);
                 }
-                $targetWidth = 500;
-                $width = imagesx($img);
-                $height = imagesy($img);
-                $desired_width = $width;
-                $desired_height = $height;
-                if ($width > $height) {
-                    $desired_width = $targetWidth;
-                    $desired_height = $targetWidth*$height/$width;
-                } else {
-                    $desired_height = $targetWidth;
-                    $desired_width = $targetWidth*$width/$height;
+            }
+            if ($isFileVid) {
+                $pictures[] = array(
+                    'path' => $entry, 
+                    'thumb' => 'thumb__'.$entry.'.jpg',
+                    'isPano' => true,
+                    'isVid' => true,
+                );
+                if (!file_exists($PATH.$thumbPath)) {
+                    exec('ffmpeg -i '.$filePath.' -vf  "thumbnail,scale=500:250" -frames:v 1 '.$thumbPath);
                 }
-                $virtual_image = imagecreatetruecolor($desired_width, $desired_height);
-                imagecopyresampled($virtual_image, $img, 0, 0, 0, 0, $desired_width, $desired_height, $width, $height);
-                imagejpeg($virtual_image, $thumbPath);
             }
         }
     }
     closedir($handle);
 }
+/*
 usort($pictures, function ($item1, $item2) {
     return $item1['path'] <=> $item2['path'];
 });
+ */
 
 if ($isLogged && $folder !== 'root' && $get !== '' && $isPano === false) {
     $filename = $PATH.$folder.'/'.$get;
     $file_extension = strtolower(substr(strrchr($filename,'.'),1));
     switch($file_extension) {
+        case 'mp4': $ctype='video/mp4'; break;
         case 'gif': $ctype='image/gif'; break;
         case 'png': $ctype='image/png'; break;
         case 'jpeg':
@@ -291,8 +348,11 @@ if ($isLogged && $folder !== 'root' && $get !== '' && $isPano === false) {
     <?php } else { ?>
     <title></title>
     <?php } ?>
-    <script src="/pannellum/pannellum.js"></script>
     <link rel="stylesheet" href="/pannellum//pannellum.css">
+    <script src="/pannellum/pannellum.js"></script>
+    <link rel="stylesheet" href="/videojs/video-js.css">
+    <script src="/videojs/video.js"></script>
+    <script src="/pannellum/videojs-pannellum-plugin.js"></script>
     <style>
         html, body, div, span, applet, object, iframe,
         h1, h2, h3, h4, h5, h6, p, blockquote, pre,
@@ -393,13 +453,16 @@ if ($isLogged && $folder !== 'root' && $get !== '' && $isPano === false) {
         .img li {
             margin: 11px;
             padding: 0px;
-            border: 5px solid #aaa;
+            border: 5px solid #777;
             display: table-row;
             float: left
         }
         .img li a {
             margin: 0px;
             padding: 0px;
+        }
+        .img .vid {
+            border: 5px dashed #777;
         }
         .formdelete {
             clear: both;
@@ -438,7 +501,7 @@ if ($isLogged && $folder !== 'root' && $get !== '' && $isPano === false) {
         </form>
         <ul class="img">
         <?php foreach($pictures as $pic) { ?>
-            <li>
+        <li class="<?php if ($pic['isVid']) {echo 'vid';} ?>">
                 <?php
                 if ($pic['isPano']) {
                     echo '<a href="?folder='.$folder.'&get='.$pic['path'].'&pano">';
@@ -456,7 +519,7 @@ if ($isLogged && $folder !== 'root' && $get !== '' && $isPano === false) {
             <input type="hidden" name="delete" value="<?php echo $folder; ?>" />
             <input type="submit" name="submit" value="Envoyer" />
         </form>
-    <?php } else if ($folder != 'root' && $get !== '' && $isPano === true) { ?>
+    <?php } else if ($folder != 'root' && $get !== '' && $isPano === true && $isVideo === false) { ?>
         <div>
         <?php echo '<a href="?folder='.$folder.'">Retour</a>'; ?>
         <span style="float: right; font-style: italic;"><?php echo $get; ?></span>
@@ -470,6 +533,27 @@ if ($isLogged && $folder !== 'root' && $get !== '' && $isPano === false) {
                 "hfov": 100.0,
                 "panorama": "<?php echo '?folder='.$folder.'&get='.$get.'&resize'; ?>"
             })
+        </script>
+    <?php } else if ($folder != 'root' && $get !== '' && $isPano === true && $isVideo === true) { ?>
+        <div>
+        <?php echo '<a href="?folder='.$folder.'">Retour</a>'; ?>
+        <span style="float: right; font-style: italic;"><?php echo $get; ?></span>
+        </div>
+        <video id="panorama" class="video-js vjs-default-skin vjs-big-play-centered"
+            controls autoplay loop preload="auto" 
+            poster="" 
+            crossorigin="anonymous">
+            <source src="<?php echo '?folder='.$folder.'&get='.$get.'&resize'; ?>" type="video/mp4"/>
+            <p class="vjs-no-js">
+                To view this video please enable JavaScript, and consider upgrading to
+                a web browser that <a href="http://videojs.com/html5-video-support/"
+                target="_blank">supports HTML5 video</a>
+            </p>
+        </video>
+        <script>
+            videojs('panorama', {
+                plugins: {pannellum: {}}
+            });
         </script>
     <?php } else { ?>
         <form action="?" method="post">
